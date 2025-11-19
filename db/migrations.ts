@@ -8,7 +8,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       'title TEXT NOT NULL,' +
       'completed INTEGER NOT NULL DEFAULT 0,' +
       'due_date TEXT,' +
-      'created_at TEXT NOT NULL DEFAULT (datetime("now"))' +
+      'created_at TEXT NOT NULL' +
       ')'
   );
 }

@@ -160,9 +160,12 @@ export default function HomeScreen() {
     }
 
     // Insere a nova tarefa com o prazo selecionado
-    await db.runAsync('INSERT INTO todos (title, completed, due_date) VALUES (?, 0, ?)', [
+    const dueDateIso = selectedDate.toISOString();
+    const createdAt = new Date().toISOString();
+    await db.runAsync('INSERT INTO todos (title, completed, due_date, created_at) VALUES (?, 0, ?, ?)', [
       trimmed,
-      selectedDate.toISOString(),
+      dueDateIso,
+      createdAt,
     ]);
     await loadTodos();
     setNewTodoTitle('');
