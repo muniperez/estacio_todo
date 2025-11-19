@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -29,32 +30,71 @@ export default function HomeScreen() {
     void loadTodos();
   }, [loadTodos]);
 
+  const handleComplete = useCallback(
+    async (todoId: number) => {
+      await markTodoAsDone(todoId);
+      setTodos((current) => current.map((todo) => (todo.id === todoId ? { ...todo, completed: true } : todo)));
+    },
+    []
+  );
+
+  const handleDelete = useCallback(
+    async (todoId: number) => {
+      await deleteTodo(todoId);
+      setTodos((current) => current.filter((todo) => todo.id !== todoId));
+    },
+    []
+  );
+
+  const renderRightActions = useCallback(
+    (item: Todo) => (
+      <Pressable style={styles.deleteButton} onPress={() => handleDelete(item.id)}>
+        <ThemedText style={styles.deleteButtonText}>Excluir</ThemedText>
+      </Pressable>
+    ),
+    [handleDelete]
+  );
+
   const renderItem = useCallback(({ item }: { item: Todo }) => {
     return (
-      <ThemedView style={styles.todoCard}>
-        <View>
-          <ThemedText type="defaultSemiBold">{item.title}</ThemedText>
-          <ThemedText style={styles.todoSubtitle}>
-            {item.completed ? 'Status: Concluida' : 'Status: Pendente'}
-          </ThemedText>
-        </View>
-      </ThemedView>
+      <Swipeable renderRightActions={() => renderRightActions(item)} overshootRight={false}>
+        <ThemedView style={styles.todoCard}>
+          <View style={styles.todoInfo}>
+            <ThemedText type="defaultSemiBold" numberOfLines={2}>
+              {item.title}
+            </ThemedText>
+            <ThemedText style={styles.todoSubtitle}>
+              {item.completed ? 'Status: Concluida' : 'Status: Pendente'}
+            </ThemedText>
+          </View>
+          {!item.completed && (
+            <Pressable style={styles.completeButton} onPress={() => handleComplete(item.id)}>
+              <ThemedText style={styles.completeButtonText}>Concluir</ThemedText>
+            </Pressable>
+          )}
+        </ThemedView>
+      </Swipeable>
     );
-  }, []);
+  }, [handleComplete, renderRightActions]);
+
+  const emptyText = useMemo(() => 'Nenhuma tarefa encontrada.', []);
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.screenTitle}>
-        Suas tarefas
-      </ThemedText>
-      <FlatList
-        data={todos}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
-    </ThemedView>
+    <GestureHandlerRootView style={styles.flex}>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title" style={styles.screenTitle}>
+          Suas tarefas
+        </ThemedText>
+        <FlatList
+          data={todos}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={<ThemedText style={styles.emptyText}>{emptyText}</ThemedText>}
+        />
+      </ThemedView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -63,7 +103,18 @@ async function fetchTodos(): Promise<Todo[]> {
   return MOCK_TODOS;
 }
 
+async function markTodoAsDone(_id: number): Promise<void> {
+  // Esta funcao vai persistir o status concluido assim que a camada de dados estiver pronta
+}
+
+async function deleteTodo(_id: number): Promise<void> {
+  // Esta funcao vai remover a tarefa do banco no passo de persistencia
+}
+
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     paddingHorizontal: 20,
@@ -79,6 +130,9 @@ const styles = StyleSheet.create({
     height: 12,
   },
   todoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderRadius: 12,
     backgroundColor: '#ffffff',
@@ -88,8 +142,39 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  todoInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
   todoSubtitle: {
     marginTop: 4,
+    color: '#6c6c6c',
+  },
+  completeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#34a853',
+  },
+  completeButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  deleteButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 100,
+    backgroundColor: '#d32f2f',
+    borderRadius: 12,
+    marginVertical: 4,
+  },
+  deleteButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 40,
     color: '#6c6c6c',
   },
 });
