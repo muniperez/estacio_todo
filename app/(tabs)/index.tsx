@@ -1,4 +1,5 @@
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { useSQLiteContext } from 'expo-sqlite';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -20,16 +21,20 @@ type Todo = {
   id: number;
   title: string;
   completed: boolean;
+  dueDate: string | null;
+  createdAt: string;
 };
 
-// Lista temporaria para simular dados enquanto a persistencia nao esta pronta
-const MOCK_TODOS: Todo[] = [
-  { id: 1, title: 'Estudar circuitos eletricos', completed: false },
-  { id: 2, title: 'Revisar calculos', completed: true },
-  { id: 3, title: 'Preparar relatorio do laboratorio', completed: false },
-];
+type TodoRow = {
+  id: number;
+  title: string;
+  completed: number;
+  due_date: string | null;
+  created_at: string;
+};
 
 export default function HomeScreen() {
+  const db = useSQLiteContext();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filterCompleted, setFilterCompleted] = useState(false);
   const [newTodoTitle, setNewTodoTitle] = useState('');
@@ -37,9 +42,12 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const loadTodos = useCallback(async () => {
-    const persistedTodos = await fetchTodos();
-    setTodos(persistedTodos);
-  }, []);
+    // Busca todas as tarefas persistidas e aplica a ordenacao desejada
+    const rows = await db.getAllAsync<TodoRow>(
+      'SELECT id, title, completed, due_date, created_at FROM todos ORDER BY due_date IS NULL, due_date ASC, created_at DESC'
+    );
+    setTodos(rows.map(mapRowToTodo));
+  }, [db]);
 
   useEffect(() => {
     void loadTodos();
@@ -47,18 +55,20 @@ export default function HomeScreen() {
 
   const handleComplete = useCallback(
     async (todoId: number) => {
-      await markTodoAsDone(todoId);
-      setTodos((current) => current.map((todo) => (todo.id === todoId ? { ...todo, completed: true } : todo)));
+      // Atualiza o status para concluido diretamente no banco
+      await db.runAsync('UPDATE todos SET completed = 1 WHERE id = ?', [todoId]);
+      await loadTodos();
     },
-    []
+    [db, loadTodos]
   );
 
   const handleDelete = useCallback(
     async (todoId: number) => {
-      await deleteTodo(todoId);
-      setTodos((current) => current.filter((todo) => todo.id !== todoId));
+      // Remove definitivamente a tarefa do banco
+      await db.runAsync('DELETE FROM todos WHERE id = ?', [todoId]);
+      await loadTodos();
     },
-    []
+    [db, loadTodos]
   );
 
   const renderRightActions = useCallback(
@@ -71,6 +81,10 @@ export default function HomeScreen() {
   );
 
   const renderItem = useCallback(({ item }: { item: Todo }) => {
+    const dueDateLabel = item.dueDate
+      ? new Date(item.dueDate).toLocaleDateString('pt-BR')
+      : 'Sem prazo definido';
+
     return (
       <Swipeable renderRightActions={() => renderRightActions(item)} overshootRight={false}>
         <ThemedView style={styles.todoCard}>
@@ -78,7 +92,8 @@ export default function HomeScreen() {
             <ThemedText type="defaultSemiBold" numberOfLines={2}>
               {item.title}
             </ThemedText>
-            <ThemedText style={styles.todoSubtitle}>
+            <ThemedText style={styles.todoSubtitle}>Prazo: {dueDateLabel}</ThemedText>
+            <ThemedText style={styles.todoStatus}>
               {item.completed ? 'Status: Concluida' : 'Status: Pendente'}
             </ThemedText>
           </View>
@@ -92,7 +107,10 @@ export default function HomeScreen() {
     );
   }, [handleComplete, renderRightActions]);
 
-  const emptyText = useMemo(() => 'Nenhuma tarefa encontrada.', []);
+  const emptyText = useMemo(
+    () => (filterCompleted ? 'Nenhuma tarefa concluida.' : 'Nenhuma tarefa pendente.'),
+    [filterCompleted]
+  );
 
   const filteredTodos = useMemo(
     () => todos.filter((todo) => (filterCompleted ? todo.completed : !todo.completed)),
@@ -141,11 +159,15 @@ export default function HomeScreen() {
       return;
     }
 
-    const newTodo = await createTodo(trimmed, selectedDate.toISOString());
-    setTodos((current) => [newTodo, ...current]);
+    // Insere a nova tarefa com o prazo selecionado
+    await db.runAsync('INSERT INTO todos (title, completed, due_date) VALUES (?, 0, ?)', [
+      trimmed,
+      selectedDate.toISOString(),
+    ]);
+    await loadTodos();
     setNewTodoTitle('');
     setIsModalVisible(false);
-  }, [newTodoTitle, selectedDate]);
+  }, [db, loadTodos, newTodoTitle, selectedDate]);
 
   return (
     <GestureHandlerRootView style={styles.flex}>
@@ -215,25 +237,14 @@ export default function HomeScreen() {
   );
 }
 
-async function fetchTodos(): Promise<Todo[]> {
-  // Placeholder para puxar os dados do sqlite mais na frente
-  return MOCK_TODOS;
-}
-
-async function markTodoAsDone(_id: number): Promise<void> {
-  // Esta funcao vai persistir o status concluido assim que a camada de dados estiver pronta
-}
-
-async function deleteTodo(_id: number): Promise<void> {
-  // Esta funcao vai remover a tarefa do banco no passo de persistencia
-}
-
-async function createTodo(title: string, dueDateIso: string): Promise<Todo> {
-  // Esta funcao vai inserir a nova tarefa no sqlite futuramente; por enquanto devolve mock
+function mapRowToTodo(row: TodoRow): Todo {
+  // Converte o formato cru do banco para o modelo exibido na interface
   return {
-    id: Date.now(),
-    title,
-    completed: false,
+    id: row.id,
+    title: row.title,
+    completed: row.completed === 1,
+    dueDate: row.due_date,
+    createdAt: row.created_at,
   };
 }
 
@@ -280,6 +291,10 @@ const styles = StyleSheet.create({
   },
   todoSubtitle: {
     marginTop: 4,
+    color: '#6c6c6c',
+  },
+  todoStatus: {
+    marginTop: 2,
     color: '#6c6c6c',
   },
   completeButton: {
