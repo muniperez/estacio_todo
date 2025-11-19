@@ -20,6 +20,7 @@ const MOCK_TODOS: Todo[] = [
 
 export default function HomeScreen() {
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [filterCompleted, setFilterCompleted] = useState(false);
 
   const loadTodos = useCallback(async () => {
     const persistedTodos = await fetchTodos();
@@ -79,14 +80,33 @@ export default function HomeScreen() {
 
   const emptyText = useMemo(() => 'Nenhuma tarefa encontrada.', []);
 
+  const filteredTodos = useMemo(
+    () => todos.filter((todo) => (filterCompleted ? todo.completed : !todo.completed)),
+    [todos, filterCompleted]
+  );
+
+  const handleToggleFilter = useCallback(() => {
+    setFilterCompleted((current) => !current);
+  }, []);
+
+  const filterLabel = useMemo(
+    () => (filterCompleted ? 'Ver pendentes' : 'Ver concluidas'),
+    [filterCompleted]
+  );
+
   return (
     <GestureHandlerRootView style={styles.flex}>
       <ThemedView style={styles.container}>
-        <ThemedText type="title" style={styles.screenTitle}>
-          Suas tarefas
-        </ThemedText>
+        <View style={styles.header}>
+          <ThemedText type="title" style={styles.screenTitle}>
+            Suas tarefas
+          </ThemedText>
+          <Pressable style={styles.filterButton} onPress={handleToggleFilter}>
+            <ThemedText style={styles.filterButtonText}>{filterLabel}</ThemedText>
+          </Pressable>
+        </View>
         <FlatList
-          data={todos}
+          data={filteredTodos}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -120,8 +140,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 24,
   },
-  screenTitle: {
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
+  },
+  screenTitle: {
+    marginBottom: 0,
   },
   listContent: {
     paddingBottom: 24,
@@ -176,5 +202,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
     color: '#6c6c6c',
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#0a7ea4',
+  },
+  filterButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });
