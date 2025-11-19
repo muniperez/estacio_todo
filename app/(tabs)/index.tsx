@@ -1,5 +1,16 @@
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 
 import { ThemedText } from '@/components/themed-text';
@@ -21,6 +32,9 @@ const MOCK_TODOS: Todo[] = [
 export default function HomeScreen() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filterCompleted, setFilterCompleted] = useState(false);
+  const [newTodoTitle, setNewTodoTitle] = useState('');
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const loadTodos = useCallback(async () => {
     const persistedTodos = await fetchTodos();
@@ -94,6 +108,45 @@ export default function HomeScreen() {
     [filterCompleted]
   );
 
+  const handleOpenModal = useCallback(() => {
+    const trimmed = newTodoTitle.trim();
+    if (!trimmed) {
+      Alert.alert('Aviso', 'Digite a descricao da tarefa antes de adicionar.');
+      return;
+    }
+    setSelectedDate(new Date());
+    setIsModalVisible(true);
+  }, [newTodoTitle]);
+
+  const handleDateChange = useCallback(
+    (_event: DateTimePickerEvent, date?: Date) => {
+      if (Platform.OS === 'android' && _event.type === 'dismissed') {
+        return;
+      }
+      if (date) {
+        setSelectedDate(date);
+      }
+    },
+    []
+  );
+
+  const handleCancelModal = useCallback(() => {
+    setIsModalVisible(false);
+  }, []);
+
+  const handleConfirmCreate = useCallback(async () => {
+    const trimmed = newTodoTitle.trim();
+    if (!trimmed) {
+      Alert.alert('Aviso', 'Digite a descricao da tarefa antes de adicionar.');
+      return;
+    }
+
+    const newTodo = await createTodo(trimmed, selectedDate.toISOString());
+    setTodos((current) => [newTodo, ...current]);
+    setNewTodoTitle('');
+    setIsModalVisible(false);
+  }, [newTodoTitle, selectedDate]);
+
   return (
     <GestureHandlerRootView style={styles.flex}>
       <ThemedView style={styles.container}>
@@ -113,7 +166,51 @@ export default function HomeScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={<ThemedText style={styles.emptyText}>{emptyText}</ThemedText>}
         />
+        <KeyboardAvoidingView
+          style={styles.composerContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}>
+          <TextInput
+            style={styles.input}
+            placeholder="Descreva a nova tarefa"
+            placeholderTextColor="#888888"
+            value={newTodoTitle}
+            onChangeText={setNewTodoTitle}
+            returnKeyType="done"
+          />
+          <Pressable style={styles.addButton} onPress={handleOpenModal}>
+            <ThemedText style={styles.addButtonText}>Adicionar</ThemedText>
+          </Pressable>
+        </KeyboardAvoidingView>
       </ThemedView>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={isModalVisible}
+        onRequestClose={handleCancelModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ThemedText type="subtitle" style={styles.modalTitle}>
+              Escolha a data limite
+            </ThemedText>
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+              onChange={handleDateChange}
+            />
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalButtonSec} onPress={handleCancelModal}>
+                <ThemedText style={styles.modalButtonSecText}>Cancelar</ThemedText>
+              </Pressable>
+              <Pressable style={styles.modalButton} onPress={handleConfirmCreate}>
+                <ThemedText style={styles.modalButtonText}>Salvar</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </GestureHandlerRootView>
   );
 }
@@ -129,6 +226,15 @@ async function markTodoAsDone(_id: number): Promise<void> {
 
 async function deleteTodo(_id: number): Promise<void> {
   // Esta funcao vai remover a tarefa do banco no passo de persistencia
+}
+
+async function createTodo(title: string, dueDateIso: string): Promise<Todo> {
+  // Esta funcao vai inserir a nova tarefa no sqlite futuramente; por enquanto devolve mock
+  return {
+    id: Date.now(),
+    title,
+    completed: false,
+  };
 }
 
 const styles = StyleSheet.create({
@@ -211,6 +317,76 @@ const styles = StyleSheet.create({
   },
   filterButtonText: {
     color: '#ffffff',
+    fontWeight: '600',
+  },
+  composerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 24,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#f1f1f1',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  addButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#0a7ea4',
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    borderRadius: 16,
+    padding: 20,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    marginBottom: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 16,
+  },
+  modalButton: {
+    flex: 1,
+    marginLeft: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0a7ea4',
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  modalButtonSec: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0a7ea4',
+    alignItems: 'center',
+  },
+  modalButtonSecText: {
+    color: '#0a7ea4',
     fontWeight: '600',
   },
 });
